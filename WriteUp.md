@@ -1,85 +1,120 @@
 # Write-up
 
-> This is the skeleton - replace everything in blockquotes with your own words
-> and delete the prompts as you go. Aim for **~300 words** across the four
-> questions; the route reference below can be as long as it needs to be.
->
-> Write it like you're handing the work to a teammate. We'd rather read an
-> honest "I ran out of time on X and here's what I'd do" than a polished list of
-> accomplishments. **Submit this even if you didn't finish** - see CHALLENGE.md.
-
 ## 1. What did you build for Part B, and why that?
 
-> What made you pick it over everything else you could have built? This is the
-> question we care most about - the _why_ matters more than the _what_.
+Visits - logging what Brennen spent at a restaurant. The `visits` table was
+already in the schema, but nothing used it: no routes, no UI, no way to
+actually record a dollar spent anywhere. For an app called "Feeding Brennen"
+that's supposed to track his spending, that felt like the obvious gap to fix.
 
 ## 2. What did you decide, and what did you rule out?
 
-> Route shapes, data model, where the logic lives, what you deliberately didn't
-> do. Name a tradeoff you're not sure you got right.
+Visits are created and listed through `/api/restaurants/:id/visits`, so the
+restaurant id comes from the URL, not the body. Reading or deleting a single
+visit is flat, `/api/visits/:id`, since it doesn't need its parent in the
+path. I left out editing a visit - only add/remove - so if you log something
+wrong you delete it and re-add it instead of patching a field. Not sure that's
+the right call for a real app, but it kept things small here.
 
 ## 3. Where did you cut corners?
 
-> What would you fix first with another day?
+No pagination on the visits list, and no spend total across *all*
+restaurants, just per restaurant. With another day I'd add that plus a way to
+edit a visit instead of only add/remove.
 
 ---
 
 ## Part B: routes
 
-> Every endpoint you added, with its request and response shapes, so we can
-> exercise it without reverse-engineering your code. Add or remove rows as
-> needed; delete this section if your Part B added no routes.
+| Method and path                    | What it does                             | Success                                        | Errors                                       |
+| ----------------------------------- | ----------------------------------------- | ------------------------------------------------ | ----------------------------------------------- |
+| `GET /api/restaurants/:id/visits`   | List a restaurant's visits + total spent | `200` + `{restaurantId, totalSpent, visits[]}`  | `404` if restaurant doesn't exist            |
+| `POST /api/restaurants/:id/visits`  | Log a visit against that restaurant      | `201` + created visit                            | `404` if restaurant doesn't exist, `400` on invalid body |
+| `GET /api/visits/:id`               | Read one visit                            | `200` + visit                                    | `404` if missing                              |
+| `DELETE /api/visits/:id`            | Delete a visit                            | `204`, no body                                   | `404` if missing                              |
 
-| Method and path | What it does | Success | Errors       |
-| --------------- | ------------ | ------- | ------------ |
-| `GET /api/...`  |              | `200` + | `404` if ... |
-| `POST /api/...` |              | `201` + | `400` on ... |
-
-**`POST /api/...`**
+**`POST /api/restaurants/:id/visits`**
 
 ```jsonc
 // request
-{ }
+{ "date": "2026-06-15", "amountSpent": 22.50, "notes": "Lunch special" }
 
 // 201 response
-{ }
+{
+  "id": 4,
+  "restaurantId": 2,
+  "date": "2026-06-15",
+  "amountSpent": 22.5,
+  "notes": "Lunch special",
+  "createdAt": "2026-09-09T19:45:07.532Z"
+}
 ```
+
+`date` is required, `YYYY-MM-DD`, must be a real calendar date. `amountSpent`
+is optional but must be `>= 0` if present. `notes` is optional.
 
 ## Schema changes
 
-> Any migrations you added (`002_*.sql`, ...), new tables or columns, and
-> anything a reviewer needs to run beyond `./setup.sh`. Write "none" if there
-> were none.
+None - `visits` was already in `001_create_tables.sql`.
 
 ## How I verified this
 
-> How you checked your work - the happy paths _and_ the failures. `curl`
-> commands, a Postman collection, a scratch script, screenshots: whatever you
-> actually used. Paste the commands.
->
-> This is much faster for us to review than working it out ourselves, and it's
-> how you show you checked the edge cases.
-
-**Part A** - the contract table in CHALLENGE.md, every row including the error
-cases:
+**Part A**, the contract table in CHALLENGE.md:
 
 ```bash
-# e.g.
-curl -i http://localhost:3000/api/restaurants          # 200 + array
-curl -i http://localhost:3000/api/restaurants/99999    # 404
-curl -i http://localhost:3000/api/restaurants/abc      # 404
+curl -i http://localhost:3000/api/restaurants                              # 200 + array
+curl -i http://localhost:3000/api/restaurants/1                            # 200 + one restaurant
+curl -i http://localhost:3000/api/restaurants/99999                        # 404
+curl -i http://localhost:3000/api/restaurants/abc                          # 404, not 500
+curl -i http://localhost:3000/api/restaurants/1.5                          # 404
+
 curl -i -X POST http://localhost:3000/api/restaurants \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Out Of Range","rating":6}'              # 400
+  -d '{"name":"Valid Spot","cuisine":"Test","address":"2 Test St","rating":4.5}'  # 201
+
+curl -i -X POST http://localhost:3000/api/restaurants \
+  -H 'Content-Type: application/json' -d '{"name":"Out Of Range","rating":6}'     # 400
+
+curl -i -X POST http://localhost:3000/api/restaurants \
+  -H 'Content-Type: application/json' -d '{"rating":3}'                          # 400, missing name
+
+curl -i -X PUT http://localhost:3000/api/restaurants/6 \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Valid Spot Updated","cuisine":"Test2","address":"3 Test St","rating":5}'  # 200
+
+curl -i -X PUT http://localhost:3000/api/restaurants/99999 \
+  -H 'Content-Type: application/json' -d '{"name":"X","rating":3}'               # 404
+
+curl -i -X DELETE http://localhost:3000/api/restaurants/6                        # 204
+curl -i -X DELETE http://localhost:3000/api/restaurants/6                        # 404 (already gone)
 ```
 
-**Part B** - the equivalent cases for what you built:
+**Part B**, the same shape for visits:
 
 ```bash
+curl -i http://localhost:3000/api/restaurants/2/visits                     # 200 + summary
+curl -i http://localhost:3000/api/restaurants/99999/visits                 # 404
 
+curl -i -X POST http://localhost:3000/api/restaurants/2/visits \
+  -H 'Content-Type: application/json' \
+  -d '{"date":"2026-05-01","amountSpent":50.25,"notes":"Test visit"}'      # 201
+
+curl -i -X POST http://localhost:3000/api/restaurants/2/visits \
+  -H 'Content-Type: application/json' -d '{"amountSpent":10}'             # 400, missing date
+
+curl -i -X POST http://localhost:3000/api/restaurants/2/visits \
+  -H 'Content-Type: application/json' -d '{"date":"2026-02-30"}'          # 400, invalid date
+
+curl -i -X DELETE http://localhost:3000/api/visits/4                       # 204
+curl -i -X DELETE http://localhost:3000/api/visits/4                       # 404 (already gone)
 ```
+
+Also clicked through the UI: opened a restaurant, logged a visit through the
+form, watched the total update, removed it, watched the total drop back down.
+`npm run lint`, `npx tsc --noEmit`, and `npm run build` all clean.
 
 ## Known issues / what I'd do next
 
-> Anything broken, unfinished, or that you know is wrong. Being upfront here
-> costs you nothing and tells us a lot.
+- No editing a visit once logged, only add/remove.
+- No pagination on the visits list.
+- No spend total across all restaurants, only per-restaurant.
