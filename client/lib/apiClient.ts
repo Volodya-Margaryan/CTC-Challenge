@@ -8,7 +8,7 @@
  * The shapes these helpers return live in `lib/types.ts`, shared with the
  * handlers that produce them.
  */
-import type { Restaurant } from './types';
+import type { Restaurant, Visit } from './types';
 
 // We read a base URL from the environment because Server Components fetch on
 // the server, where relative URLs don't resolve - so we need an absolute origin.
@@ -33,5 +33,17 @@ export async function getRestaurants(): Promise<Restaurant[]> {
  */
 export async function getRestaurant(id: number | string): Promise<Restaurant> {
   const res = await fetch(`${API_URL}/api/restaurants/${id}`, { cache: 'no-store' });
+  return res.json();
+}
+
+export interface RestaurantVisits {
+  restaurantId: number;
+  totalSpent: number;
+  visits: Visit[];
+}
+
+// Visits for one restaurant, plus the total spent there.
+export async function getRestaurantVisits(id: number | string): Promise<RestaurantVisits> {
+  const res = await fetch(`${API_URL}/api/restaurants/${id}/visits`, { cache: 'no-store' });
   return res.json();
 }
